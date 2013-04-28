@@ -1,0 +1,37 @@
+#!/usr/bin/env python
+
+import csv
+import os
+from pprint import pprint
+import sys
+
+
+class App:
+    def __init__(self, script_dir):
+        self.params = {}
+        self.script_dir = script_dir
+
+    def get_results_filepath(self):
+        results_dir = self.params.get("results_filepath", self.script_dir)
+        return os.path.join(results_dir, self.params["results_leafname"])
+
+    def parse_csv(self):
+        with open(self.get_results_filepath(), 'rb') as csvfile:
+            d = csv.Sniffer().sniff(csvfile.read(1024), ',')
+            csvfile.seek(0)
+            csvreader = csv.DictReader(csvfile, dialect=d)
+            for line in csvreader:
+                pprint(line)
+
+    def execute(self):
+        self.parse_csv()
+
+
+if __name__ == "__main__":
+    script_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
+    app = App(script_dir)
+    app.params = {
+        "results_leafname": "results-hoc2013.csv"
+    }
+    app.execute()
+    print "Done."
