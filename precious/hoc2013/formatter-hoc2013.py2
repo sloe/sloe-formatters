@@ -97,7 +97,12 @@ class App:
         for number in sorted(self.entries.keys()):
             item = self.entries[number]
             title = '%d "%s %s" "%s" "%s" %d of %d' % (number, item["type"], item["class"], item["category"], item["name"], item["position"], item["num_entries"])
-            content += " = %s\r\n" % title
+            if item["number"] < 400:
+                template = "card1/00.MTS"
+            else:
+                template = "card2/00.MTS"
+
+            content += "%s = %s\r\n" % (template, title)
 
         return content
 
