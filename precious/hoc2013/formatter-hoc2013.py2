@@ -6,6 +6,7 @@ import os
 import logging
 from pprint import pprint, pformat
 import re
+import subprocess
 import sys
 
 
@@ -21,6 +22,18 @@ class App:
     def get_template_filepath(self):
         results_dir = self.params.get("template_filepath", self.script_dir)
         return os.path.join(results_dir, self.params["template_leafname"])
+
+    def get_mapping_filepath(self):
+        results_dir = self.params.get("mapping_filepath", self.script_dir)
+        return os.path.join(results_dir, self.params["mapping_leafname"])
+
+    def get_capture_filepath(self, leafpath):
+        results_dir = self.params["capture_dir"]
+        return os.path.normpath(os.path.join(results_dir, leafpath))
+
+    def get_primary_filepath(self, leafpath):
+        results_dir = self.params["primary_dir"]
+        return os.path.normpath(os.path.join(results_dir, leafpath))
 
     def convert_time(self, value):
         match = re.match(r"([0-5][0-9]):([0-5][0-9]):([0-5][0-9])", value)
@@ -52,6 +65,8 @@ class App:
             for item in csvreader:
                 if not re.match(r"[0-9]+$", item["number"]):
                     logging.warning("Ignoring CSV line %s" % pformat(item))
+                elif item["adj_time"] == "":
+                    logging.warning("Skipping untimed crew %s" % pformat(item))
                 else:
                     number = int(item["number"])
                     if number in self.entries:
@@ -107,19 +122,78 @@ class App:
         return content
 
 
+    def get_dest_filename(self, number):
+        item = self.entries[number]
+        name = item["name"]
+        name = re.sub(r"[^0-9A-Za-z +]", " ", name)
+        return "%d %s %s %s, %d of %d.mp4" % (number, name, item["class"], item["type"], item["position"], item["num_entries"])
+
+
+    def generate_primary(self):
+        self.mappings = []
+        with open(self.get_mapping_filepath(), 'rb') as mappingfile:
+            for line in mappingfile:
+                if not line.startswith("#"):
+                    match = re.match(r"([0-9A-Za-z./_]+) = (\d+) ", line)
+                    if not match:
+                        logging.error("Undecodable mapping %s" % line)
+                    else:
+                        filepath = self.get_capture_filepath(match.group(1))
+                        if not os.path.exists(filepath):
+                            logging.error("Missing file in mapping %s" % filepath)
+                        else:
+                            self.mappings += [{
+                                "filepath": filepath,
+                                "number": int(match.group(2))
+                            }]
+
+        for mapping in self.mappings:
+            number = mapping["number"]
+            dest_filepath = self.get_primary_filepath(self.get_dest_filename(number))
+            print "%s -> %s" % (mapping["filepath"], dest_filepath)
+            if True:
+                subprocess.check_call([
+                    self.params["ffmpeg_path"],
+                    "-y",
+                    "-i", mapping["filepath"],
+                    "-an",
+                    dest_filepath + ".yuv"
+                ])
+            subprocess.check_call([
+                self.params["ffmpeg_path"],
+                "-y",
+                "-s", "1920x1080",
+                "-r", "120",
+                "-i", dest_filepath + ".yuv",
+                "-an",
+                "-vcodec", "libx264",
+                "-preset", "slow",
+                "-b:v", "100000k",
+                dest_filepath
+            ])
+
+            os.remove(dest_filepath + ".yuv")
+
     def execute(self):
         self.parse_csv()
         with open(self.get_template_filepath(), 'wb') as template_file:
             template_file.write(self.generate_template())
-
+        if not os.path.exists(self.get_mapping_filepath()):
+            logging.info("Not generating primary footage because mapping file missing (%s)" % self.get_mapping_filepath())
+        else:
+            self.generate_primary()
 
 if __name__ == "__main__":
     logging.getLogger().setLevel(logging.INFO)
     script_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
     app = App(script_dir)
     app.params = {
+        "ffmpeg_path": os.path.normpath(os.path.join(script_dir, "../../../sloe-winbin/ffmpeg/bin/ffmpeg.exe")),
         "results_leafname": "results-hoc2013.csv",
-        "template_leafname": "template-hoc2013.txt"
+        "template_leafname": "template-hoc2013.txt",
+        "mapping_leafname": "mapping-hoc2013.txt",
+        "capture_dir": os.path.normpath(os.path.join(script_dir, "../../../capture/precious/hoc2013")),
+        "primary_dir": os.path.normpath(os.path.join(script_dir, "../../../primary/derived/hoc2013"))
     }
     app.execute()
     print "Done."
