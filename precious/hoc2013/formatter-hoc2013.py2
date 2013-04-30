@@ -125,7 +125,7 @@ class App:
     def get_dest_filename(self, number):
         item = self.entries[number]
         name = item["name"]
-        name = re.sub(r"[^0-9A-Za-z +]", " ", name)
+        name = re.sub(r"[^0-9A-Za-z +']", " ", name)
         return "%d %s %s %s, %d of %d.mp4" % (number, name, item["class"], item["type"], item["position"], item["num_entries"])
 
 
@@ -167,8 +167,10 @@ class App:
                 "-i", dest_filepath + ".yuv",
                 "-an",
                 "-vcodec", "libx264",
-                "-preset", "slow",
+                "-preset", "medium",
                 "-b:v", "100000k",
+                "-pix_fmt", "yuv420p",
+                "-tune", "film",
                 dest_filepath
             ])
 
