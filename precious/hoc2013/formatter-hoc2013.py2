@@ -136,22 +136,27 @@ class App:
                 if not line.startswith("#"):
                     match = re.match(r"([0-9A-Za-z./_]+) = (\d+) ", line)
                     if not match:
+                        match = re.match(r'([0-9A-Za-z./_]+) = "([^"]+)"', line)
+                    if not match:
                         logging.error("Undecodable mapping %s" % line)
                     else:
                         filepath = self.get_capture_filepath(match.group(1))
                         if not os.path.exists(filepath):
                             logging.error("Missing file in mapping %s" % filepath)
                         else:
+                            if re.match(r"\d+$", match.group(2)):
+                                dest_filename =  self.get_dest_filename(int(match.group(2)))
+                            else:
+                                dest_filename = match.group(2) + ".mp4"
                             self.mappings += [{
                                 "filepath": filepath,
-                                "number": int(match.group(2))
+                                "dest_filename": dest_filename
                             }]
 
         for mapping in self.mappings:
-            number = mapping["number"]
-            dest_filepath = self.get_primary_filepath(self.get_dest_filename(number))
+            dest_filepath = self.get_primary_filepath(mapping["dest_filename"])
             print "%s -> %s" % (mapping["filepath"], dest_filepath)
-            if True:
+            if not os.path.isfile(dest_filepath):
                 subprocess.check_call([
                     self.params["ffmpeg_path"],
                     "-y",
@@ -159,22 +164,22 @@ class App:
                     "-an",
                     dest_filepath + ".yuv"
                 ])
-            subprocess.check_call([
-                self.params["ffmpeg_path"],
-                "-y",
-                "-s", "1920x1080",
-                "-r", "120",
-                "-i", dest_filepath + ".yuv",
-                "-an",
-                "-vcodec", "libx264",
-                "-preset", "medium",
-                "-b:v", "100000k",
-                "-pix_fmt", "yuv420p",
-                "-tune", "film",
-                dest_filepath
-            ])
+                subprocess.check_call([
+                    self.params["ffmpeg_path"],
+                    "-y",
+                    "-s", "1920x1080",
+                    "-r", str(self.params["output_fps"]),
+                    "-i", dest_filepath + ".yuv",
+                    "-an",
+                    "-vcodec", "libx264",
+                    "-preset", "medium",
+                    "-b:v", self.params["output_bitrate"],
+                    "-pix_fmt", "yuv420p",
+                    "-tune", "film",
+                    dest_filepath
+                ])
 
-            os.remove(dest_filepath + ".yuv")
+                os.remove(dest_filepath + ".yuv")
 
     def execute(self):
         self.parse_csv()
@@ -195,7 +200,21 @@ if __name__ == "__main__":
         "template_leafname": "template-hoc2013.txt",
         "mapping_leafname": "mapping-hoc2013.txt",
         "capture_dir": os.path.normpath(os.path.join(script_dir, "../../../capture/precious/hoc2013")),
-        "primary_dir": os.path.normpath(os.path.join(script_dir, "../../../primary/derived/hoc2013"))
+        "primary_dir": os.path.normpath(os.path.join(script_dir, "../../../primary/derived/hoc2013")),
+        "output_fps": 120,
+        "output_bitrate": "100000k"
+
     }
+    app.params.update({
+        "mapping_leafname": "extras-hoc2013.txt",
+        "primary_dir": os.path.normpath(os.path.join(script_dir, "../../../primary/derived/hoc2013/extras")),
+        "output_fps": 240,
+        "output_bitrate": "200000k"
+    })
+
     app.execute()
+
+
+
+
     print "Done."
